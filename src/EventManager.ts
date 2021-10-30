@@ -1,4 +1,4 @@
-import { NativeEventEmitter } from 'react-native';
+import { EmitterSubscription, NativeEventEmitter, NativeModule } from 'react-native';
 import NotificationReceivedEvent from './NotificationReceivedEvent';
 import { isMultipleInstancesPossible } from './helpers';
 import {
@@ -30,13 +30,20 @@ const eventList = [
 ]
 
 export default class EventManager {
-    constructor(RNOneSignal) {
+    RNOneSignal: NativeModule;
+    notificationCache: Map<any, any>;
+    oneSignalEventEmitter: NativeEventEmitter;
+    eventHandlerMap: Map<string, (event: any) => void>;
+    eventHandlerArrayMap: Map<string, Array<(event: any) => void>>;
+    listeners: { [key: string]: EmitterSubscription };
+
+    constructor(RNOneSignal: NativeModule) {
         this.RNOneSignal = RNOneSignal;
         this.notificationCache = new Map();
         this.oneSignalEventEmitter = new NativeEventEmitter(RNOneSignal);
         this.eventHandlerMap = new Map();       // used for setters (single replacable callback)
         this.eventHandlerArrayMap = new Map();  // used for adders (multiple callbacks possible)
-        this.listeners = [];
+        this.listeners = {};
         this.setupListeners();
     }
 
@@ -63,7 +70,7 @@ export default class EventManager {
      * @param  {string} eventName
      * @param  {function} handler
      */
-    setEventHandler(eventName, handler) {
+    setEventHandler(eventName: string, handler: (event: any) => void): void {
         this.eventHandlerMap.set(eventName, handler);
     }
 
@@ -72,7 +79,7 @@ export default class EventManager {
      * @param  {string} eventName
      * @param  {function} handler
      */
-    addEventHandler(eventName, handler) {
+    addEventHandler(eventName: string, handler: (event: any) => void): void {
         let handlerArray = this.eventHandlerArrayMap.get(eventName);
         handlerArray && handlerArray.length > 0 ? handlerArray.push(handler) : this.eventHandlerArrayMap.set(eventName, [handler]);
     }
@@ -82,13 +89,13 @@ export default class EventManager {
      * @param  {string} eventName
      * @param  {function} handler
      */
-    clearEventHandler(eventName) {
+    clearEventHandler(eventName: string) {
         this.eventHandlerArrayMap.delete(eventName);
     }
 
     // returns an event listener with the js to native mapping
-    generateEventListener(eventName) {
-        const addListenerCallback = (payload) => {
+    generateEventListener(eventName: string) {
+        const addListenerCallback = (payload: any) => {
             if (isMultipleInstancesPossible(eventName)) {
                 // used for adders
                 let handlerArray = this.eventHandlerArrayMap.get(eventName);
@@ -112,7 +119,7 @@ export default class EventManager {
         return this.oneSignalEventEmitter.addListener(eventName, addListenerCallback);
     }
 
-    getFinalPayload(eventName, payload) {
+    getFinalPayload(eventName: string, payload: any) {
         switch(eventName) {
             case NOTIFICATION_WILL_SHOW:
                 return new NotificationReceivedEvent(payload);
